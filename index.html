@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PaisaPulse — Track every rupee</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js" onerror="console.info('No config.js found — running on local demo data. See README → Secrets setup.')"></script>
+<style>
+  :root {
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+
+    --ink: #14161f;
+    --ink-soft: #4b4f5c;
+    --paper: #e9edea;
+    --paper-deep: #dde3de;
+    --card: #ffffff;
+    --line: #dadfda;
+    --accent: #e2984a;
+    --accent-ink: #6b4514;
+    --positive: #1f8f7e;
+    --positive-bg: #e2f3ee;
+    --negative: #c0503f;
+    --negative-bg: #fbe9e5;
+    --shadow: 0 1px 2px rgba(20,22,31,.04), 0 8px 24px -12px rgba(20,22,31,.18);
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  * { box-sizing: border-box; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #eef0ea; --ink-soft: #b2b7ae; --paper: #14161a; --paper-deep: #0d0e11;
+      --card: #1c1f24; --line: #2b2f35; --accent: #eaa858; --accent-ink: #2a1c08;
+      --positive: #3fb39f; --positive-bg: #123029; --negative: #e07160; --negative-bg: #3a1a15;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 28px -12px rgba(0,0,0,.55);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #eef0ea; --ink-soft: #b2b7ae; --paper: #14161a; --paper-deep: #0d0e11;
+    --card: #1c1f24; --line: #2b2f35; --accent: #eaa858; --accent-ink: #2a1c08;
+    --positive: #3fb39f; --positive-bg: #123029; --negative: #e07160; --negative-bg: #3a1a15;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 28px -12px rgba(0,0,0,.55);
+  }
+
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper-deep);
+    color: var(--ink);
+    font-family: 'Manrope', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    justify-content: center;
+  }
+  .serif { font-family: 'Fraunces', serif; }
+
+  /* ---------- App shell: phone frame ---------- */
+  #app {
+    width: 100%;
+    max-width: 460px;
+    min-height: 100vh;
+    background: var(--paper);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow-x: hidden;
+  }
+  @media (min-width: 560px) {
+    body { padding: 32px 16px; align-items: flex-start; }
+    #app { min-height: calc(100vh - 64px); border-radius: 28px; box-shadow: 0 30px 80px -30px rgba(0,0,0,.35); overflow: hidden; border: 1px solid var(--line); }
+  }
+
+  a, button { font-family: inherit; }
+  button { cursor: pointer; }
+
+  /* ---------- Screens ---------- */
+  .screen { display: none; flex: 1; flex-direction: column; }
+  .screen.active { display: flex; }
+
+  /* ===== Auth ===== */
+  #auth {
+    padding: env(safe-area-inset-top, 0px) 28px 28px;
+    justify-content: center;
+    background: linear-gradient(180deg, var(--paper) 0%, var(--paper-deep) 100%);
+    min-height: 100vh;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 40px; }
+  .brand .mark { width: 38px; height: 38px; border-radius: 11px; background: var(--accent); display: flex; align-items: center; justify-content: center; color: var(--accent-ink); font-weight: 800; font-size: 18px; }
+  .brand .word { font-size: 19px; font-weight: 800; letter-spacing: -0.01em; }
+  .brand .word em { font-style: normal; color: var(--accent); }
+
+  .auth-head h1 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 30px; line-height: 1.2; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .auth-head p { margin: 0 0 28px; color: var(--ink-soft); font-size: 14.5px; line-height: 1.5; max-width: 34ch; }
+
+  .tabs { display: flex; gap: 4px; background: var(--paper-deep); padding: 4px; border-radius: 12px; margin-bottom: 22px; }
+  .tab-btn { flex: 1; border: none; background: transparent; padding: 9px 0; border-radius: 9px; font-size: 13.5px; font-weight: 700; color: var(--ink-soft); transition: background .15s, color .15s; }
+  .tab-btn.active { background: var(--card); color: var(--ink); box-shadow: var(--shadow); }
+
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12.5px; font-weight: 700; color: var(--ink-soft); margin-bottom: 6px; }
+  .field input { width: 100%; border: 1.5px solid var(--line); background: var(--card); border-radius: 11px; padding: 13px 14px; font-size: 15px; color: var(--ink); outline: none; transition: border-color .15s; }
+  .field input:focus { border-color: var(--accent); }
+
+  .primary-btn { width: 100%; border: none; background: var(--ink); color: var(--paper); font-weight: 700; font-size: 15px; padding: 14px; border-radius: 12px; margin-top: 6px; transition: transform .1s, opacity .15s; }
+  .primary-btn:active { transform: scale(.98); }
+  .primary-btn.accent { background: var(--accent); color: var(--accent-ink); }
+
+  .auth-pane { display: none; }
+  .auth-pane.active { display: block; }
+
+  .qr-box { background: var(--card); border: 1.5px dashed var(--line); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; align-items: center; gap: 14px; margin-bottom: 18px; }
+  .qr-grid { width: 168px; height: 168px; }
+  .qr-caption { font-size: 13px; color: var(--ink-soft); text-align: center; }
+  .qr-refresh { font-size: 12.5px; font-weight: 700; color: var(--accent); background: none; border: none; padding: 0; }
+
+  .auth-foot { text-align: center; margin-top: 18px; font-size: 12.5px; color: var(--ink-soft); }
+  .auth-demo { margin-top: 22px; font-size: 11.5px; color: var(--ink-soft); text-align: center; opacity: .8; line-height: 1.5; }
+
+  /* ===== App header ===== */
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: calc(env(safe-area-inset-top, 0px) + 18px) 22px 6px; }
+  .greet { font-size: 13px; color: var(--ink-soft); margin: 0 0 2px; }
+  .greet-name { font-size: 19px; font-weight: 800; margin: 0; letter-spacing: -0.01em; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; border: none; }
+
+  .page { padding: 14px 22px 100px; overflow-y: auto; flex: 1; }
+  .page::-webkit-scrollbar { display: none; }
+
+  h2.section-title { font-size: 15px; font-weight: 800; margin: 26px 0 12px; letter-spacing: -0.005em; }
+  h2.section-title:first-child { margin-top: 6px; }
+  .row-between { display: flex; align-items: center; justify-content: space-between; }
+  .link-btn { border: none; background: none; color: var(--accent); font-weight: 700; font-size: 13px; padding: 0; }
+
+  /* ===== Balance card ===== */
+  .balance-card { background: var(--ink); color: var(--paper); border-radius: 20px; padding: 24px 22px; position: relative; overflow: hidden; }
+  .balance-card::after { content:""; position:absolute; right:-40px; top:-40px; width:160px; height:160px; border-radius:50%; background: radial-gradient(circle, rgba(226,152,74,.35), transparent 70%); }
+  .balance-label { font-size: 12.5px; opacity: .65; margin: 0 0 6px; font-weight: 600; }
+  .balance-amt { font-family: 'Fraunces', serif; font-size: 38px; font-weight: 500; margin: 0; letter-spacing: -0.01em; position: relative; }
+  .balance-sub { display: flex; gap: 18px; margin-top: 18px; position: relative; }
+  .balance-stat { flex: 1; }
+  .balance-stat .k { font-size: 11.5px; opacity: .6; font-weight: 600; margin: 0 0 3px; display:flex; align-items:center; gap:5px; }
+  .balance-stat .v { font-size: 16px; font-weight: 800; margin: 0; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+
+  /* ===== Quick actions ===== */
+  .quick-row { display: flex; gap: 10px; margin-top: 16px; }
+  .quick-btn { flex: 1; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; color: var(--ink); box-shadow: var(--shadow); }
+  .quick-btn .ic { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+
+  /* ===== Category chips (chart legend) ===== */
+  .chart-card { background: var(--card); border-radius: 18px; padding: 18px; box-shadow: var(--shadow); border: 1px solid var(--line); }
+  .chart-wrap { position: relative; width: 150px; height: 150px; margin: 4px auto 8px; }
+  .chart-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .chart-center .amt { font-size: 15px; font-weight: 800; }
+  .chart-center .lbl { font-size: 10.5px; color: var(--ink-soft); }
+  .legend { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+  .legend-row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .legend-row .sw { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+  .legend-row .nm { flex: 1; font-weight: 600; }
+  .legend-row .pct { color: var(--ink-soft); font-weight: 700; font-size: 12px; }
+
+  .trend-card { background: var(--card); border-radius: 18px; padding: 18px 16px; box-shadow: var(--shadow); border: 1px solid var(--line); }
+  .trend-card canvas { max-height: 140px; }
+
+  /* ===== Transaction list ===== */
+  .txn-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .txn-item:last-child { border-bottom: none; }
+  .txn-ic { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+  .txn-mid { flex: 1; min-width: 0; }
+  .txn-mid .nm { font-weight: 700; font-size: 14px; margin: 0 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .txn-mid .meta { font-size: 12px; color: var(--ink-soft); margin: 0; }
+  .txn-amt { font-weight: 800; font-size: 14.5px; text-align: right; white-space: nowrap; }
+  .txn-amt.pos { color: var(--positive); }
+  .txn-amt.neg { color: var(--ink); }
+
+  .list-card { background: var(--card); border-radius: 18px; padding: 6px 18px; box-shadow: var(--shadow); border: 1px solid var(--line); }
+
+  /* ===== Search / filter (transactions page) ===== */
+  .search-box { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 11px 14px; margin-bottom: 12px; }
+  .search-box input { border: none; outline: none; background: none; flex: 1; font-size: 14px; color: var(--ink); font-family: inherit; }
+  .search-box svg { flex-shrink: 0; opacity: .5; }
+  .chip-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 14px; }
+  .chip-row::-webkit-scrollbar { display: none; }
+  .chip { flex-shrink: 0; border: 1px solid var(--line); background: var(--card); padding: 7px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 700; color: var(--ink-soft); }
+  .chip.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+  .month-divider { font-size: 11.5px; font-weight: 800; color: var(--ink-soft); text-transform: none; margin: 20px 0 8px; }
+  .empty-state { text-align: center; padding: 50px 20px; color: var(--ink-soft); }
+  .empty-state .em { font-size: 34px; margin-bottom: 10px; }
+  .empty-state p { font-size: 13.5px; margin: 0; }
+
+  /* ===== Budgets ===== */
+  .budget-card { background: var(--card); border-radius: 16px; padding: 16px; box-shadow: var(--shadow); border: 1px solid var(--line); margin-bottom: 12px; }
+  .budget-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .budget-top .txn-ic { width: 34px; height: 34px; font-size: 15px; }
+  .budget-top .nm { font-weight: 700; font-size: 14px; flex: 1; margin: 0; }
+  .budget-top .amt { font-size: 12.5px; font-weight: 700; color: var(--ink-soft); }
+  .bar-track { height: 8px; background: var(--paper-deep); border-radius: 999px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 999px; transition: width .4s ease; }
+  .budget-foot { display: flex; justify-content: space-between; margin-top: 7px; font-size: 11.5px; color: var(--ink-soft); }
+
+  /* ===== Profile ===== */
+  .profile-head { display: flex; flex-direction: column; align-items: center; padding: 10px 0 24px; text-align: center; }
+  .profile-head .av-big { width: 76px; height: 76px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 28px; margin-bottom: 12px; }
+  .profile-head .nm { font-size: 18px; font-weight: 800; margin: 0 0 3px; }
+  .profile-head .sub { font-size: 13px; color: var(--ink-soft); margin: 0; }
+
+  .plist { background: var(--card); border-radius: 16px; box-shadow: var(--shadow); border: 1px solid var(--line); overflow: hidden; margin-bottom: 16px; }
+  .prow { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); font-size: 14px; font-weight: 600; }
+  .prow:last-child { border-bottom: none; }
+  .prow .ic { width: 30px; height: 30px; border-radius: 9px; background: var(--paper-deep); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .prow .chev { margin-left: auto; opacity: .4; }
+  .prow.danger { color: var(--negative); }
+
+  /* ===== Bottom nav ===== */
+  .navbar { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-around; background: var(--card); border-top: 1px solid var(--line); padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  .nav-btn { background: none; border: none; display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--ink-soft); font-size: 10px; font-weight: 700; padding: 4px 10px; }
+  .nav-btn svg { width: 21px; height: 21px; }
+  .nav-btn.active { color: var(--ink); }
+  .nav-btn.fab { background: var(--accent); color: var(--accent-ink); width: 46px; height: 46px; border-radius: 15px; align-items: center; justify-content: center; margin-top: -22px; box-shadow: 0 8px 18px -6px rgba(226,152,74,.55); }
+  .nav-btn.fab svg { width: 22px; height: 22px; }
+
+  /* ===== Add-transaction sheet ===== */
+  .sheet-backdrop { position: fixed; inset: 0; background: rgba(10,10,14,.45); display: none; z-index: 40; align-items: flex-end; justify-content: center; }
+  .sheet-backdrop.active { display: flex; }
+  .sheet { width: 100%; max-width: 460px; background: var(--card); border-radius: 22px 22px 0 0; padding: 10px 22px calc(24px + env(safe-area-inset-bottom, 0px)); max-height: 88vh; overflow-y: auto; }
+  .sheet-handle { width: 36px; height: 4px; background: var(--line); border-radius: 3px; margin: 6px auto 14px; }
+  .sheet h3 { font-size: 17px; font-weight: 800; margin: 0 0 16px; }
+  .type-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
+  .type-toggle button { flex: 1; padding: 10px; border-radius: 11px; border: 1.5px solid var(--line); background: var(--card); font-weight: 700; font-size: 13.5px; color: var(--ink-soft); }
+  .type-toggle button.active.expense { border-color: var(--negative); color: var(--negative); background: var(--negative-bg); }
+  .type-toggle button.active.income { border-color: var(--positive); color: var(--positive); background: var(--positive-bg); }
+  .cat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 6px; }
+  .cat-pick { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 10px 4px; border-radius: 13px; border: 1.5px solid transparent; background: var(--paper-deep); }
+  .cat-pick.active { border-color: var(--accent); background: var(--card); }
+  .cat-pick .ic { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+  .cat-pick .lb { font-size: 10px; font-weight: 700; color: var(--ink-soft); text-align: center; }
+
+  .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(10px); background: var(--ink); color: var(--paper); padding: 12px 20px; border-radius: 12px; font-size: 13.5px; font-weight: 700; opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 60; box-shadow: var(--shadow); }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .icon-btn { background: var(--paper-deep); border: none; width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ AUTH SCREEN ============ -->
+  <section id="auth" class="screen active">
+    <div class="brand"><div class="mark">₹</div><div class="word">Paisa<em>Pulse</em></div></div>
+    <div class="auth-head">
+      <h1>Know where every rupee goes.</h1>
+      <p>Sign in to see your spending, budgets and trends in one place.</p>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-authtab="email">Email</button>
+      <button class="tab-btn" data-authtab="mobile">Mobile</button>
+      <button class="tab-btn" data-authtab="qr">QR code</button>
+    </div>
+
+    <div class="auth-pane active" data-authpane="email">
+      <div class="field"><label>Email address</label><input type="email" id="emailInput" placeholder="you@example.com" autocomplete="email"></div>
+      <div class="field"><label>Password</label><input type="password" id="passInput" placeholder="••••••••" autocomplete="current-password"></div>
+      <button class="primary-btn" onclick="login('email')">Continue</button>
+    </div>
+
+    <div class="auth-pane" data-authpane="mobile">
+      <div id="mobileStep1">
+        <div class="field"><label>Mobile number</label><input type="tel" id="mobileInput" placeholder="+91 98765 43210" autocomplete="tel"></div>
+        <button class="primary-btn" id="sendOtpBtn" onclick="sendOtp()">Send OTP</button>
+      </div>
+      <div id="mobileStep2" style="display:none">
+        <div class="field"><label>Enter the 6-digit code</label><input type="text" id="otpInput" placeholder="••••••" inputmode="numeric" maxlength="6"></div>
+        <button class="primary-btn" id="verifyOtpBtn" onclick="verifyOtp()">Verify &amp; continue</button>
+        <button class="qr-refresh" style="margin-top:10px" onclick="resetMobileStep()">Use a different number</button>
+      </div>
+    </div>
+
+    <div class="auth-pane" data-authpane="qr">
+      <div class="qr-box">
+        <svg class="qr-grid" viewBox="0 0 100 100" id="qrSvg"></svg>
+        <p class="qr-caption" id="qrCaption">Open the PaisaPulse mobile app → Settings → Scan to log in on web</p>
+        <button class="qr-refresh" onclick="renderQR(); toast('New code generated')">Refresh code</button>
+      </div>
+      <button class="primary-btn accent" onclick="login('qr')">Simulate scan &amp; continue</button>
+    </div>
+
+    <p class="auth-foot">New here? <b style="color:var(--ink)">Create an account</b></p>
+    <p class="auth-demo">Demo build — any input signs you in. Data shown is sample data seeded on this device, not a live account.</p>
+  </section>
+
+  <!-- ============ HOME ============ -->
+  <section id="home" class="screen">
+    <div class="topbar">
+      <div>
+        <p class="greet" id="greetTime">Good afternoon</p>
+        <p class="greet-name" id="greetName">Arjun</p>
+      </div>
+      <button class="avatar" id="avatarBtn">A</button>
+    </div>
+    <div class="page">
+      <div class="balance-card">
+        <p class="balance-label">Total balance</p>
+        <p class="balance-amt" id="balanceAmt">₹0</p>
+        <div class="balance-sub">
+          <div class="balance-stat"><p class="k"><span class="dot" style="background:var(--positive)"></span>Income (this month)</p><p class="v" id="incomeAmt">₹0</p></div>
+          <div class="balance-stat"><p class="k"><span class="dot" style="background:var(--accent)"></span>Spent (this month)</p><p class="v" id="spentAmt">₹0</p></div>
+        </div>
+      </div>
+
+      <div class="quick-row">
+        <button class="quick-btn" onclick="openSheet('expense')"><span class="ic" style="background:var(--negative-bg);color:var(--negative)">↑</span>Add expense</button>
+        <button class="quick-btn" onclick="openSheet('income')"><span class="ic" style="background:var(--positive-bg);color:var(--positive)">↓</span>Add income</button>
+        <button class="quick-btn" onclick="go('budgets')"><span class="ic" style="background:#eaddff;color:#6a3fc9">🎯</span>Budgets</button>
+        <button class="quick-btn" onclick="go('transactions')"><span class="ic" style="background:#fff0da;color:#9a6a12">🧾</span>History</button>
+      </div>
+
+      <h2 class="section-title">Where it went this month</h2>
+      <div class="chart-card">
+        <div class="chart-wrap"><canvas id="donutChart"></canvas><div class="chart-center"><div class="amt" id="donutCenterAmt">₹0</div><div class="lbl">spent</div></div></div>
+        <div class="legend" id="donutLegend"></div>
+      </div>
+
+      <h2 class="section-title">6-month trend</h2>
+      <div class="trend-card"><canvas id="trendChart"></canvas></div>
+
+      <div class="row-between">
+        <h2 class="section-title" style="margin-bottom:12px">Recent activity</h2>
+        <button class="link-btn" onclick="go('transactions')">See all</button>
+      </div>
+      <div class="list-card" id="recentList"></div>
+    </div>
+  </section>
+
+  <!-- ============ TRANSACTIONS ============ -->
+  <section id="transactions" class="screen">
+    <div class="topbar"><p class="greet-name" style="font-size:20px">Transactions</p><button class="icon-btn" onclick="openSheet('expense')">+</button></div>
+    <div class="page">
+      <div class="search-box">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input type="text" id="searchInput" placeholder="Search merchant or note" oninput="renderTransactionsPage()">
+      </div>
+      <div class="chip-row" id="filterChips"></div>
+      <div id="txnListWrap"></div>
+    </div>
+  </section>
+
+  <!-- ============ BUDGETS ============ -->
+  <section id="budgets" class="screen">
+    <div class="topbar"><p class="greet-name" style="font-size:20px">Budgets</p></div>
+    <div class="page">
+      <p style="color:var(--ink-soft);font-size:13.5px;margin:0 0 18px">Monthly limits by category. Set once, PaisaPulse tracks the rest.</p>
+      <div id="budgetList"></div>
+    </div>
+  </section>
+
+  <!-- ============ PROFILE ============ -->
+  <section id="profile" class="screen">
+    <div class="topbar"><p class="greet-name" style="font-size:20px">Profile</p></div>
+    <div class="page">
+      <div class="profile-head">
+        <div class="av-big" id="profAv">A</div>
+        <p class="nm" id="profName">Arjun Mehta</p>
+        <p class="sub" id="profContact">arjun.mehta@example.com</p>
+      </div>
+      <div class="plist">
+        <div class="prow"><span class="ic">👤</span>Personal details<span class="chev">›</span></div>
+        <div class="prow"><span class="ic">🔗</span>Linked accounts<span class="chev">›</span></div>
+        <div class="prow"><span class="ic">🔔</span>Notifications<span class="chev">›</span></div>
+        <div class="prow"><span class="ic">🌓</span>Theme<span class="chev" style="opacity:1;display:flex;gap:6px" id="themeSwitch"></span></div>
+      </div>
+      <div class="plist">
+        <div class="prow"><span class="ic">📤</span>Export data (.csv)<span class="chev">›</span></div>
+        <div class="prow"><span class="ic">🛡️</span>Privacy &amp; security<span class="chev">›</span></div>
+        <div class="prow"><span class="ic">❓</span>Help &amp; support<span class="chev">›</span></div>
+      </div>
+      <div class="plist">
+        <button class="prow danger" style="width:100%;background:none;border:none;text-align:left" onclick="logout()"><span class="ic">↩︎</span>Log out</button>
+      </div>
+      <p style="text-align:center;font-size:11px;color:var(--ink-soft);margin-top:6px">PaisaPulse · demo build</p>
+    </div>
+  </section>
+
+  <!-- ============ BOTTOM NAV ============ -->
+  <nav class="navbar" id="navbar">
+    <button class="nav-btn active" data-nav="home" onclick="go('home')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>Home</button>
+    <button class="nav-btn" data-nav="transactions" onclick="go('transactions')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>History</button>
+    <button class="nav-btn fab" onclick="openSheet('expense')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button class="nav-btn" data-nav="budgets" onclick="go('budgets')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="0.8" fill="currentColor"/></svg>Budgets</button>
+    <button class="nav-btn" data-nav="profile" onclick="go('profile')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c1.5-4 4.5-6 7-6s5.5 2 7 6"/></svg>Profile</button>
+  </nav>
+
+  <!-- ============ ADD TRANSACTION SHEET ============ -->
+  <div class="sheet-backdrop" id="sheetBackdrop" onclick="if(event.target===this)closeSheet()">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <h3 id="sheetTitle">Add expense</h3>
+      <div class="type-toggle">
+        <button id="typeExpenseBtn" class="active expense" onclick="setTxnType('expense')">Expense</button>
+        <button id="typeIncomeBtn" class="income" onclick="setTxnType('income')">Income</button>
+      </div>
+      <div class="field"><label>Amount (₹)</label><input type="number" id="amtInput" placeholder="0" inputmode="decimal"></div>
+      <div class="field"><label>Merchant / source</label><input type="text" id="merchInput" placeholder="e.g. Swiggy, Salary"></div>
+      <div class="field"><label>Category</label><div class="cat-grid" id="catGrid"></div></div>
+      <div class="field"><label>Date</label><input type="date" id="dateInput"></div>
+      <button class="primary-btn accent" onclick="saveTxn()">Save transaction</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+/* =========================================================
+   PAISAPULSE — backend wiring
+   Reads from window.__PAISAPULSE_CONFIG__, which config.js
+   defines. config.js is git-ignored — copy config.example.js
+   to config.js and fill in your Supabase project's URL and
+   anon key (see README → "Secrets setup"). No config.js, or
+   an empty one, and the app just runs on seeded local demo
+   data — every screen works either way.
+   ========================================================= */
+const _cfg = window.__PAISAPULSE_CONFIG__ || {};
+const SUPABASE_URL = _cfg.SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = _cfg.SUPABASE_ANON_KEY || '';
+
+const USE_SUPABASE = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
+const sb = USE_SUPABASE ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+/* =========================================================
+   Demo data layer — used directly when USE_SUPABASE is false,
+   and as the local cache / instant-render source either way.
+   ========================================================= */
+
+const CATS = [
+  { id:'food',      name:'Food & dining', icon:'🍔', color:'#e2984a', type:'expense' },
+  { id:'groceries', name:'Groceries',     icon:'🛒', color:'#7aa66b', type:'expense' },
+  { id:'transport',  name:'Transport',    icon:'🚕', color:'#4d8fac', type:'expense' },
+  { id:'bills',      name:'Bills & utilities', icon:'💡', color:'#c0503f', type:'expense' },
+  { id:'shopping',   name:'Shopping',     icon:'🛍️', color:'#8a5fc2', type:'expense' },
+  { id:'entertain',  name:'Entertainment',icon:'🎬', color:'#c2568f', type:'expense' },
+  { id:'health',     name:'Health',       icon:'💊', color:'#3f9c8c', type:'expense' },
+  { id:'rent',       name:'Rent & housing', icon:'🏠', color:'#6b5b3e', type:'expense' },
+  { id:'travel',     name:'Travel',       icon:'✈️', color:'#3a7bd5', type:'expense' },
+  { id:'other',      name:'Other',        icon:'🔖', color:'#8a8f98', type:'expense' },
+  { id:'salary',     name:'Salary',       icon:'💰', color:'#1f8f7e', type:'income' },
+  { id:'freelance',  name:'Freelance',    icon:'💻', color:'#1f8f7e', type:'income' },
+];
+const catById = id => CATS.find(c => c.id === id);
+
+function pad(n){ return String(n).padStart(2,'0'); }
+function isoDaysAgo(d){ const dt = new Date(); dt.setDate(dt.getDate()-d); return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`; }
+function isoMonthsAgo(m, day){ const dt = new Date(); dt.setMonth(dt.getMonth()-m); if(day) dt.setDate(day); return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`; }
+
+function seedTransactions(){
+  const t = [];
+  let id = 1;
+  const push = (daysAgo, cat, merchant, amount, type='expense', note='') =>
+    t.push({ id:id++, category_id:cat, merchant, note, amount, type, date: isoDaysAgo(daysAgo) });
+
+  // This month & last ~55 days of everyday spend
+  push(1,'food','Blue Tokai Coffee',260);
+  push(1,'transport','Ola',185);
+  push(2,'groceries','BigBasket',2140);
+  push(3,'food','Swiggy — Truffles',540);
+  push(3,'entertain','Netflix',199);
+  push(4,'shopping','Myntra',3299);
+  push(5,'bills','Airtel Postpaid',699);
+  push(5,'transport','Uber',230);
+  push(6,'food','Chai Point',90);
+  push(7,'health','Apollo Pharmacy',450);
+  push(8,'groceries','Zepto',860);
+  push(9,'food',"Domino's",689);
+  push(10,'bills','Tata Power',1850);
+  push(11,'shopping','Amazon',1249);
+  push(12,'transport','Metro card recharge',500);
+  push(13,'food','Starbucks',420);
+  push(14,'entertain','BookMyShow — PVR',700);
+  push(15,'other','Gift — birthday',1500);
+  push(16,'groceries','DMart',1780);
+  push(18,'bills','Jio Fiber',999);
+  push(20,'food','Meghana Foods',860);
+  push(22,'transport','Petrol — Indian Oil',2500);
+  push(24,'health','Cult.fit membership',1999);
+  push(26,'shopping','Nike.com',4499);
+  push(28,'food','Third Wave Coffee',310);
+  push(1,'salary','Infosys Ltd',95000,'income','Monthly salary');
+  push(20,'freelance','UX audit — client',12000,'income');
+
+  // Previous 5 months, lighter seed for the trend chart
+  for (let m=1;m<=5;m++){
+    push(0,'rent','House rent', 22000,'expense');  t[t.length-1].date = isoMonthsAgo(m,1);
+    push(0,'salary','Infosys Ltd', 95000 - (m%2===0?0:3000),'income','Monthly salary'); t[t.length-1].date = isoMonthsAgo(m,1);
+    push(0,'groceries','BigBasket', 5200+ m*140,'expense'); t[t.length-1].date = isoMonthsAgo(m,6);
+    push(0,'food','Various dining', 3400 + (m*260)%900,'expense'); t[t.length-1].date = isoMonthsAgo(m,14);
+    push(0,'transport','Fuel & cabs', 2600 + (m*90)%400,'expense'); t[t.length-1].date = isoMonthsAgo(m,18);
+    push(0,'bills','Utilities', 3100,'expense'); t[t.length-1].date = isoMonthsAgo(m,9);
+    push(0,'shopping','Shopping', 1800 + (m*310)%2000,'expense'); t[t.length-1].date = isoMonthsAgo(m,22);
+    push(0,'entertain','Leisure', 900,'expense'); t[t.length-1].date = isoMonthsAgo(m,11);
+  }
+  // Rent for current month too
+  push(2,'rent','House rent',22000);
+  return t;
+}
+
+const DEFAULT_STATE = () => ({
+  user: { name:'Arjun Mehta', email:'arjun.mehta@example.com', mobile:'+91 98765 43210', initial:'A' },
+  session: false,
+  theme: 'light',
+  transactions: seedTransactions(),
+  budgets: [
+    { category_id:'food', limit:6000 },
+    { category_id:'groceries', limit:8000 },
+    { category_id:'transport', limit:4000 },
+    { category_id:'shopping', limit:5000 },
+    { category_id:'bills', limit:3500 },
+    { category_id:'entertain', limit:2000 },
+  ],
+});
+
+const STORE_KEY = 'paisapulse_state_v1';
+function loadState(){
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e){}
+  const fresh = DEFAULT_STATE();
+  persist(fresh);
+  return fresh;
+}
+function persist(s){ try { localStorage.setItem(STORE_KEY, JSON.stringify(s)); } catch(e){} }
+
+let state = loadState();
+
+/* ---------- helpers ---------- */
+const inr = n => '₹' + Math.round(n).toLocaleString('en-IN');
+const inrSigned = n => (n<0?'-':'') + inr(Math.abs(n));
+function monthKey(dateStr){ return dateStr.slice(0,7); }
+function thisMonthKey(){ const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}`; }
+
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(window.__toastT);
+  window.__toastT = setTimeout(()=>el.classList.remove('show'), 2200);
+}
+
+/* ---------- auth ---------- */
+document.querySelectorAll('[data-authtab]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('[data-authtab]').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('[data-authpane]').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelector(`[data-authpane="${btn.dataset.authtab}"]`).classList.add('active');
+  });
+});
+
+/* ---------- QR pairing ----------
+   Real flow: web inserts a short-lived row into `pairing_codes`
+   (see supabase-schema.sql), shows it as a QR code, and listens
+   on Realtime for that row to be claimed. The PaisaPulse mobile
+   app — already signed in — scans it and calls a Supabase Edge
+   Function that verifies the code and writes the scanning user's
+   id onto the row (minting a session client-side isn't safe with
+   only the anon key, which is why that last step needs a small
+   server function rather than a direct table write).
+   Without SUPABASE_URL/KEY set, "Simulate scan" just logs the
+   demo user in directly so the screen still works end to end. */
+let qrChannel = null;
+let currentQrCode = null;
+
+function randomPairingCode(len=8){
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let out = '';
+  for(let i=0;i<len;i++) out += chars[Math.floor(Math.random()*chars.length)];
+  return out;
+}
+
+function drawQR(text){
+  const svg = document.getElementById('qrSvg');
+  let cells = '';
+  const n = 11;
+  let s = 0; for(let i=0;i<text.length;i++) s = (s*31 + text.charCodeAt(i)) % 233280;
+  const rand = () => { s = (s*9301+49297) % 233280; return s/233280; };
+  for(let y=0;y<n;y++){
+    for(let x=0;x<n;x++){
+      const isFinder = (x<3&&y<3)||(x>n-4&&y<3)||(x<3&&y>n-4);
+      const on = isFinder ? ((x+y)%2===0 || (x%2===0&&y%2===0)) : rand() > 0.58;
+      if(on) cells += `<rect x="${x*(100/n)}" y="${y*(100/n)}" width="${100/n}" height="${100/n}" fill="var(--ink)"/>`;
+    }
+  }
+  svg.innerHTML = cells;
+}
+
+async function renderQR(){
+  if(qrChannel){ sb.removeChannel(qrChannel); qrChannel = null; }
+  currentQrCode = randomPairingCode();
+  drawQR(currentQrCode);
+  const cap = document.getElementById('qrCaption');
+
+  if(!USE_SUPABASE){
+    cap.textContent = 'Open the PaisaPulse mobile app → Settings → Scan to log in on web';
+    return;
+  }
+  cap.textContent = 'Waiting for a scan…';
+  try{
+    await sb.from('pairing_codes').insert({ code: currentQrCode });
+    qrChannel = sb.channel(`pairing:${currentQrCode}`)
+      .on('postgres_changes', { event:'UPDATE', schema:'public', table:'pairing_codes', filter:`code=eq.${currentQrCode}` }, async payload => {
+        if(payload.new.user_id){
+          cap.textContent = 'Scanned — signing you in…';
+          await loadRemoteState();
+          document.getElementById('auth').classList.remove('active');
+          enterApp();
+        }
+      })
+      .subscribe();
+  } catch(e){
+    cap.textContent = 'Open the PaisaPulse mobile app → Settings → Scan to log in on web';
+  }
+}
+renderQR();
+
+function resetMobileStep(){
+  document.getElementById('mobileStep1').style.display = '';
+  document.getElementById('mobileStep2').style.display = 'none';
+  document.getElementById('otpInput').value = '';
+}
+
+async function sendOtp(){
+  const mob = document.getElementById('mobileInput').value.trim();
+  if(!mob){ toast('Enter a mobile number'); return; }
+  state.user.mobile = mob;
+  if(USE_SUPABASE){
+    const btn = document.getElementById('sendOtpBtn');
+    btn.textContent = 'Sending…'; btn.disabled = true;
+    const { error } = await sb.auth.signInWithOtp({ phone: mob });
+    btn.textContent = 'Send OTP'; btn.disabled = false;
+    if(error){ toast(error.message); return; }
+  }
+  document.getElementById('mobileStep1').style.display = 'none';
+  document.getElementById('mobileStep2').style.display = '';
+  toast(USE_SUPABASE ? 'OTP sent' : 'Demo mode — enter any 6 digits');
+}
+
+async function verifyOtp(){
+  const mob = state.user.mobile;
+  const code = document.getElementById('otpInput').value.trim();
+  if(!code){ toast('Enter the code'); return; }
+  if(USE_SUPABASE){
+    const { error } = await sb.auth.verifyOtp({ phone: mob, token: code, type: 'sms' });
+    if(error){ toast(error.message); return; }
+    await loadRemoteState();
+  } else {
+    state.session = true; persist(state);
+  }
+  document.getElementById('auth').classList.remove('active');
+  enterApp();
+}
+
+async function login(method){
+  if(method==='email'){
+    const email = document.getElementById('emailInput').value.trim();
+    const password = document.getElementById('passInput').value;
+    if(!email){ toast('Enter an email'); return; }
+    if(USE_SUPABASE){
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if(error){ toast(error.message); return; }
+      await loadRemoteState();
+    } else {
+      state.user.email = email;
+      state.session = true; persist(state);
+    }
+  } else if(method==='qr'){
+    // Fallback path for demo mode / manual "simulate scan" without a paired mobile app
+    if(USE_SUPABASE){ toast('Scan the code with the PaisaPulse app to continue'); return; }
+    state.session = true; persist(state);
+  }
+  document.getElementById('auth').classList.remove('active');
+  enterApp();
+}
+
+/* Pull this user's profile, transactions and budgets from Supabase into `state` */
+async function loadRemoteState(){
+  if(!USE_SUPABASE) return;
+  const { data: { user } } = await sb.auth.getUser();
+  if(!user) return;
+  const [{ data: profile }, { data: txns }, { data: budgets }] = await Promise.all([
+    sb.from('profiles').select('*').eq('id', user.id).maybeSingle(),
+    sb.from('transactions').select('*').eq('user_id', user.id).order('occurred_on', { ascending:false }),
+    sb.from('budgets').select('*').eq('user_id', user.id),
+  ]);
+  state.user.name = profile?.full_name || user.email || state.user.name;
+  state.user.email = user.email || state.user.email;
+  state.user.mobile = profile?.mobile || user.phone || state.user.mobile;
+  state.user.initial = (state.user.name || '?').charAt(0).toUpperCase();
+  if(txns) state.transactions = txns.map(t=>({ id:t.id, category_id:t.category_id, merchant:t.merchant, note:t.note||'', amount:Number(t.amount), type:t.type, date:t.occurred_on }));
+  if(budgets) state.budgets = budgets.map(b=>({ category_id:b.category_id, limit:Number(b.monthly_limit) }));
+  state.session = true;
+  state.remoteUserId = user.id;
+}
+
+async function logout(){
+  if(USE_SUPABASE) await sb.auth.signOut();
+  state.session = false;
+  persist(state);
+  document.getElementById('app').querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('auth').classList.add('active');
+  renderQR();
+}
+
+/* ---------- app render ---------- */
+function enterApp(){
+  const hr = new Date().getHours();
+  document.getElementById('greetTime').textContent = hr<12 ? 'Good morning' : hr<17 ? 'Good afternoon' : 'Good evening';
+  document.getElementById('greetName').textContent = state.user.name.split(' ')[0];
+  document.getElementById('avatarBtn').textContent = state.user.initial;
+  document.getElementById('profAv').textContent = state.user.initial;
+  document.getElementById('profName').textContent = state.user.name;
+  document.getElementById('profContact').textContent = state.user.email;
+  buildThemeSwitch();
+  renderHome();
+  renderBudgetsPage();
+  buildCatGrid();
+  go('home');
+}
+
+function go(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(name).classList.add('active');
+  document.querySelectorAll('.nav-btn[data-nav]').forEach(b=>b.classList.toggle('active', b.dataset.nav===name));
+  if(name==='transactions') renderTransactionsPage();
+  if(name==='budgets') renderBudgetsPage();
+}
+
+/* ---------- HOME ---------- */
+let donutChart, trendChart;
+function renderHome(){
+  const mk = thisMonthKey();
+  const monthTxns = state.transactions.filter(t=>monthKey(t.date)===mk);
+  const income = monthTxns.filter(t=>t.type==='income').reduce((a,t)=>a+t.amount,0);
+  const spent  = monthTxns.filter(t=>t.type==='expense').reduce((a,t)=>a+t.amount,0);
+  const balance = state.transactions.reduce((a,t)=> a + (t.type==='income'?t.amount:-t.amount), 0);
+
+  document.getElementById('balanceAmt').textContent = inr(balance);
+  document.getElementById('incomeAmt').textContent = inr(income);
+  document.getElementById('spentAmt').textContent = inr(spent);
+  document.getElementById('donutCenterAmt').textContent = inr(spent);
+
+  // category breakdown (this month, expenses)
+  const byCat = {};
+  monthTxns.filter(t=>t.type==='expense').forEach(t=> byCat[t.category_id] = (byCat[t.category_id]||0) + t.amount);
+  const entries = Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
+  const total = entries.reduce((a,[,v])=>a+v,0) || 1;
+
+  const ctx = document.getElementById('donutChart');
+  if(donutChart) donutChart.destroy();
+  donutChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: entries.map(([id])=>catById(id).name),
+      datasets: [{ data: entries.map(([,v])=>v), backgroundColor: entries.map(([id])=>catById(id).color), borderWidth: 0, hoverOffset: 4 }]
+    },
+    options: { cutout: '72%', plugins: { legend: { display:false }, tooltip: { callbacks: { label: c => inr(c.raw) } } } }
+  });
+
+  const legend = document.getElementById('donutLegend');
+  legend.innerHTML = entries.slice(0,6).map(([id,v])=>{
+    const c = catById(id);
+    return `<div class="legend-row"><span class="sw" style="background:${c.color}"></span><span class="nm">${c.name}</span><span class="pct">${Math.round(v/total*100)}%</span></div>`;
+  }).join('') || `<p style="color:var(--ink-soft);font-size:13px;text-align:center;padding:10px 0">No spending yet this month</p>`;
+
+  // 6-month trend
+  const months = [];
+  for(let i=5;i>=0;i--){
+    const d = new Date(); d.setMonth(d.getMonth()-i);
+    months.push({ key: `${d.getFullYear()}-${pad(d.getMonth()+1)}`, label: d.toLocaleString('en-IN',{month:'short'}) });
+  }
+  const spentByMonth = months.map(m => state.transactions.filter(t=>t.type==='expense' && monthKey(t.date)===m.key).reduce((a,t)=>a+t.amount,0));
+  const incomeByMonth = months.map(m => state.transactions.filter(t=>t.type==='income' && monthKey(t.date)===m.key).reduce((a,t)=>a+t.amount,0));
+
+  const tctx = document.getElementById('trendChart');
+  if(trendChart) trendChart.destroy();
+  const rootStyles = getComputedStyle(document.documentElement);
+  trendChart = new Chart(tctx, {
+    type: 'bar',
+    data: {
+      labels: months.map(m=>m.label),
+      datasets: [
+        { label:'Spent', data: spentByMonth, backgroundColor: rootStyles.getPropertyValue('--accent').trim() || '#e2984a', borderRadius:5, maxBarThickness: 18 },
+        { label:'Income', data: incomeByMonth, backgroundColor: rootStyles.getPropertyValue('--positive').trim() || '#1f8f7e', borderRadius:5, maxBarThickness: 18 },
+      ]
+    },
+    options: {
+      responsive:true,
+      plugins: { legend: { display:true, position:'bottom', labels:{ boxWidth:8, usePointStyle:true, font:{size:11} } }, tooltip:{ callbacks:{ label: c => `${c.dataset.label}: ${inr(c.raw)}` } } },
+      scales: { x:{ grid:{ display:false } }, y:{ display:false } }
+    }
+  });
+
+  // recent
+  const recent = [...state.transactions].sort((a,b)=> b.date.localeCompare(a.date) || b.id-a.id).slice(0,5);
+  document.getElementById('recentList').innerHTML = recent.map(txnRow).join('');
+}
+
+function txnRow(t){
+  const c = catById(t.category_id);
+  const isIncome = t.type === 'income';
+  const d = new Date(t.date+'T00:00:00');
+  const dateLabel = d.toLocaleDateString('en-IN',{ day:'numeric', month:'short' });
+  return `<div class="txn-item">
+    <div class="txn-ic" style="background:${c.color}22;color:${c.color}">${c.icon}</div>
+    <div class="txn-mid"><p class="nm">${t.merchant}</p><p class="meta">${c.name} · ${dateLabel}</p></div>
+    <div class="txn-amt ${isIncome?'pos':'neg'}">${isIncome?'+':'−'}${inr(t.amount)}</div>
+  </div>`;
+}
+
+/* ---------- TRANSACTIONS PAGE ---------- */
+let activeFilter = 'all';
+function renderTransactionsPage(){
+  const chipsWrap = document.getElementById('filterChips');
+  const chips = ['all','income','expense', ...[...new Set(state.transactions.map(t=>t.category_id))]];
+  if(chipsWrap.childElementCount === 0){
+    chipsWrap.innerHTML = chips.map(c=>{
+      const label = c==='all' ? 'All' : c==='income' ? 'Income' : c==='expense' ? 'Expenses' : catById(c).name;
+      return `<button class="chip ${c==='all'?'active':''}" data-filter="${c}">${label}</button>`;
+    }).join('');
+    chipsWrap.querySelectorAll('.chip').forEach(ch=>{
+      ch.addEventListener('click', ()=>{
+        chipsWrap.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));
+        ch.classList.add('active');
+        activeFilter = ch.dataset.filter;
+        renderTransactionsPage();
+      });
+    });
+  }
+
+  const q = (document.getElementById('searchInput').value || '').toLowerCase();
+  let list = [...state.transactions].sort((a,b)=> b.date.localeCompare(a.date) || b.id-a.id);
+  if(activeFilter==='income') list = list.filter(t=>t.type==='income');
+  else if(activeFilter==='expense') list = list.filter(t=>t.type==='expense');
+  else if(activeFilter!=='all') list = list.filter(t=>t.category_id===activeFilter);
+  if(q) list = list.filter(t=> t.merchant.toLowerCase().includes(q) || (t.note||'').toLowerCase().includes(q));
+
+  const wrap = document.getElementById('txnListWrap');
+  if(!list.length){
+    wrap.innerHTML = `<div class="empty-state"><div class="em">🔍</div><p>No transactions match. Try a different search or filter.</p></div>`;
+    return;
+  }
+
+  let html = '';
+  let lastMonth = '';
+  let openCard = false;
+  list.forEach(t=>{
+    const mk = monthKey(t.date);
+    if(mk !== lastMonth){
+      if(openCard) html += `</div>`;
+      const d = new Date(t.date+'T00:00:00');
+      html += `<div class="month-divider">${d.toLocaleDateString('en-IN',{month:'long', year:'numeric'})}</div><div class="list-card">`;
+      lastMonth = mk; openCard = true;
+    }
+    html += txnRow(t);
+  });
+  if(openCard) html += `</div>`;
+  wrap.innerHTML = html;
+}
+
+/* ---------- BUDGETS PAGE ---------- */
+function renderBudgetsPage(){
+  const mk = thisMonthKey();
+  const wrap = document.getElementById('budgetList');
+  wrap.innerHTML = state.budgets.map(b=>{
+    const c = catById(b.category_id);
+    const spent = state.transactions.filter(t=>t.category_id===b.category_id && t.type==='expense' && monthKey(t.date)===mk).reduce((a,t)=>a+t.amount,0);
+    const pct = Math.min(100, Math.round(spent/b.limit*100));
+    const over = spent > b.limit;
+    const barColor = over ? 'var(--negative)' : pct>80 ? 'var(--accent)' : 'var(--positive)';
+    return `<div class="budget-card">
+      <div class="budget-top">
+        <div class="txn-ic" style="background:${c.color}22;color:${c.color}">${c.icon}</div>
+        <p class="nm">${c.name}</p>
+        <p class="amt">${inr(spent)} / ${inr(b.limit)}</p>
+      </div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
+      <div class="budget-foot"><span>${pct}% used</span><span>${over ? 'Over budget' : inr(b.limit-spent) + ' left'}</span></div>
+    </div>`;
+  }).join('');
+}
+
+/* ---------- ADD TRANSACTION SHEET ---------- */
+let sheetType = 'expense';
+let sheetCat = null;
+function buildCatGrid(){
+  const grid = document.getElementById('catGrid');
+  function paint(){
+    const cats = CATS.filter(c=>c.type===sheetType);
+    if(!cats.find(c=>c.id===sheetCat)) sheetCat = cats[0].id;
+    grid.innerHTML = cats.map(c=>`<button class="cat-pick ${c.id===sheetCat?'active':''}" data-cat="${c.id}"><span class="ic" style="background:${c.color}22;color:${c.color}">${c.icon}</span><span class="lb">${c.name.split(' ')[0]}</span></button>`).join('');
+    grid.querySelectorAll('.cat-pick').forEach(btn=>{
+      btn.addEventListener('click', ()=>{ sheetCat = btn.dataset.cat; paint(); });
+    });
+  }
+  paint();
+  buildCatGrid._paint = paint;
+}
+function setTxnType(type){
+  sheetType = type;
+  document.getElementById('typeExpenseBtn').classList.toggle('active', type==='expense');
+  document.getElementById('typeIncomeBtn').classList.toggle('active', type==='income');
+  document.getElementById('sheetTitle').textContent = type==='expense' ? 'Add expense' : 'Add income';
+  sheetCat = null;
+  buildCatGrid();
+}
+function openSheet(type){
+  setTxnType(type || 'expense');
+  document.getElementById('amtInput').value = '';
+  document.getElementById('merchInput').value = '';
+  const today = new Date();
+  document.getElementById('dateInput').value = `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
+  document.getElementById('sheetBackdrop').classList.add('active');
+}
+function closeSheet(){ document.getElementById('sheetBackdrop').classList.remove('active'); }
+async function saveTxn(){
+  const amount = parseFloat(document.getElementById('amtInput').value);
+  const merchant = document.getElementById('merchInput').value.trim();
+  const date = document.getElementById('dateInput').value;
+  if(!amount || amount<=0){ toast('Enter a valid amount'); return; }
+  if(!merchant){ toast('Add a merchant or source'); return; }
+  if(!date){ toast('Pick a date'); return; }
+
+  if(USE_SUPABASE && state.remoteUserId){
+    const { data, error } = await sb.from('transactions').insert({
+      user_id: state.remoteUserId, category_id: sheetCat, merchant, note:'', amount, type: sheetType, occurred_on: date,
+    }).select().single();
+    if(error){ toast(error.message); return; }
+    state.transactions.push({ id:data.id, category_id:data.category_id, merchant:data.merchant, note:data.note||'', amount:Number(data.amount), type:data.type, date:data.occurred_on });
+  } else {
+    const nextId = Math.max(0, ...state.transactions.map(t=>t.id)) + 1;
+    state.transactions.push({ id: nextId, category_id: sheetCat, merchant, note:'', amount, type: sheetType, date });
+    persist(state);
+  }
+
+  closeSheet();
+  toast(sheetType==='expense' ? 'Expense added' : 'Income added');
+  renderHome();
+  renderBudgetsPage();
+  if(document.getElementById('transactions').classList.contains('active')) renderTransactionsPage();
+}
+
+/* ---------- theme ---------- */
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme', t);
+  state.theme = t; persist(state);
+  buildThemeSwitch();
+  if(document.getElementById('home').classList.contains('active')) renderHome();
+}
+function buildThemeSwitch(){
+  const box = document.getElementById('themeSwitch');
+  const opts = [['light','☀️'],['dark','🌙']];
+  box.innerHTML = opts.map(([v,ic])=>`<button data-th="${v}" style="border:none;background:${state.theme===v?'var(--ink)':'var(--paper-deep)'};color:${state.theme===v?'var(--paper)':'var(--ink-soft)'};width:26px;height:26px;border-radius:8px;font-size:12px">${ic}</button>`).join('');
+  box.querySelectorAll('button').forEach(b=> b.addEventListener('click', e=>{ e.stopPropagation(); applyTheme(b.dataset.th); }));
+}
+if(state.theme) document.documentElement.setAttribute('data-theme', state.theme);
+
+document.getElementById('avatarBtn').addEventListener('click', ()=>go('profile'));
+
+/* ---------- boot ---------- */
+(async function boot(){
+  if(USE_SUPABASE){
+    const { data: { session } } = await sb.auth.getSession();
+    if(session){
+      await loadRemoteState();
+      document.getElementById('auth').classList.remove('active');
+      enterApp();
+    }
+  } else if(state.session){
+    document.getElementById('auth').classList.remove('active');
+    enterApp();
+  }
+})();
+</script>
+</body>
+</html>

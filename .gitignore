@@ -1,0 +1,13 @@
+# Real Supabase config — never commit this, copy config.example.js instead
+config.js
+
+# Supabase CLI local state
+.supabase/
+supabase/.temp/
+
+# Local secrets files, if you keep one for `supabase secrets set --env-file`
+.env
+.env.*
+!.env.example
+
+.DS_Store
