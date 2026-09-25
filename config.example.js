@@ -10,6 +10,7 @@
 // projects), just don't mistake it for a true secret.
 
 window.__PAISAPULSE_CONFIG__ = {
-  SUPABASE_URL: '',       // e.g. 'https://xxxxx.supabase.co'
-  SUPABASE_ANON_KEY: '',  // Project Settings → API → "anon public" key
+SUPABASE_URL: 'https://motvvmhnhhuoqobhqqzl.supabase.co',       // e.g. 'https://xxxxx.supabase.co'
+  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1vdHZ2bWhuaGh1b3FvYmhxcXpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzNTQ1OTEsImV4cCI6MjEwNTkzMDU5MX0.8IU4MmZxuKRC4D2dmZ8AjDXsFqOY8LhbgNL6wrEQumc',  // Project Settings → API → "anon public" key
 };
+
